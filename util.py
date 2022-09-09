@@ -5,7 +5,7 @@ import _pickle as cPickle
 from sklearn.preprocessing import LabelEncoder
 
 
-def recognize_features_type(df, class_name):    
+def recognize_features_type(df, class_name):
     integer_features = list(df.select_dtypes(include=['int64']).columns)
     double_features = list(df.select_dtypes(include=['float64']).columns)
     string_features = list(df.select_dtypes(include=['object']).columns)
@@ -21,24 +21,24 @@ def recognize_features_type(df, class_name):
         features_type[col] = 'double'
     for col in string_features:
         features_type[col] = 'string'
-        
+
     return type_features, features_type
 
 
 def set_discrete_continuous(features, type_features, class_name, discrete=None, continuous=None):
-    
     if discrete is None and continuous is None:
         discrete = type_features['string']
         continuous = type_features['integer'] + type_features['double']
-        
+
     if discrete is None and continuous is not None:
         discrete = [f for f in features if f not in continuous]
         continuous = list(set(continuous + type_features['integer'] + type_features['double']))
-        
+
     if continuous is None and discrete is not None:
-        continuous = [f for f in features if f not in discrete and (f in type_features['integer'] or f in type_features['double'])]
+        continuous = [f for f in features if
+                      f not in discrete and (f in type_features['integer'] or f in type_features['double'])]
         discrete = list(set(discrete + type_features['string']))
-    
+
     discrete = [f for f in discrete if f != class_name] + [class_name]
     continuous = [f for f in continuous if f != class_name]
     return discrete, continuous
@@ -71,7 +71,7 @@ def get_closest(df, x, discrete, continuous, class_name, distance_function, k=10
     distances = list()
     for z in df.to_dict('records'):
         distances.append(distance_function(x, z, discrete, continuous, class_name))
-        
+
     return np.argsort(distances).tolist()[:k]
 
 
@@ -114,9 +114,6 @@ def get_closest_diffoutcome(df, x, discrete, continuous, class_name, blackbox, l
         final_indexes = all_indexs
 
     return final_indexes
-
-
-
 
 
 def generate_artificial_features(size, class_name, columns, features_type, discrete, continuous, ratio=0.25):
@@ -182,12 +179,11 @@ def generate_artificial_features(size, class_name, columns, features_type, discr
 
 
 def build_df2explain(bb, X, dataset):
-    
     columns = dataset['columns']
     features_type = dataset['features_type']
     discrete = dataset['discrete']
     label_encoder = dataset['label_encoder']
-    
+
     y = bb.predict(X)
     yX = np.concatenate((y.reshape(-1, 1), X), axis=1)
     data = list()
@@ -203,23 +199,23 @@ def build_df2explain(bb, X, dataset):
     return dfZ
 
 
-def dataframe2explain(X2E, dataset, idx_record2explain, blackbox):
+def dataframe2explain(X2E, dataset, record2explain, blackbox):
     # Dataset to explit to perform explanation (typically is the train or test set (real instances))
     Z = cPickle.loads(cPickle.dumps(X2E))
 
     # Select record to predict and explain
-    x = Z[idx_record2explain]
+    # x = Z[idx_record2explain]
+    x = record2explain
 
     # Remove record to explain (optional) from dataset Z and convert into dataframe
     # Z = np.delete(Z, idx_record2explain, axis=0)
     dfZ = build_df2explain(blackbox, Z, dataset)
-    
+
     return dfZ, x
 
 
 def get_diff_outcome(outcome, possible_outcomes):
     return possible_outcomes[1] if outcome == possible_outcomes[0] else possible_outcomes[0]
-
 
 
 

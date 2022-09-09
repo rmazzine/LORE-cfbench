@@ -1,5 +1,7 @@
 import os
 import re
+import time
+import hashlib
 import pydotplus
 import subprocess
 
@@ -14,24 +16,36 @@ from collections import defaultdict
 
 def fit(df, class_name, columns, features_type, discrete, continuous,
         filename='yadt_dataset', path='./', sep=';', log=False):
-    
-    data_filename = path + filename + '.data'
-    names_filename = path + filename + '.names'
-    tree_filename = path + filename + '.dot'
-    
+    m = hashlib.md5()
+    m.update(b"%.20f" % time.time())
+
+    hash_data = hashlib.sha256(str.encode(pd.util.hash_pandas_object(df).astype(str).sum())).hexdigest()
+
+    data_filename = path + filename + str(m.hexdigest()) + '_' + hash_data + '.data'
+    names_filename = path + filename + str(m.hexdigest()) + '_' + hash_data + '.names'
+    tree_filename = path + filename + str(m.hexdigest()) + '_' + hash_data + '.dot'
+
+    for k, v in features_type.items():
+        if v == 'integer':
+            df[k] = df[k].map(int)
+
     df.to_csv(data_filename, sep=sep, header=False, index=False)
-    
+
     names_file = open(names_filename, 'w')
     for col in columns:
         col_type = features_type[col]
         disc_cont = 'discrete' if col in discrete else 'continuous'
-        disc_cont = 'class' if col == class_name else disc_cont 
+        disc_cont = 'class' if col == class_name else disc_cont
         names_file.write('%s%s%s%s%s\n' % (col, sep, col_type, sep, disc_cont))
     names_file.close()
-    
-    cmd = 'yadt/dTcmd -fd %s -fm %s -sep %s -d %s' % (
-        data_filename, names_filename, sep, tree_filename)
-    output = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT)
+
+    # cmd = 'yadt/dTcmd -fd %s -fm %s -sep %s -d %s' % (
+    #     data_filename, names_filename, sep, tree_filename)
+    # cmd = '..\\frameworks\\LORE\\yadt\\dTcmd -fd %s -fm %s -sep %s -d %s' % (  # WINDOWS VERSION
+    #     data_filename, names_filename, sep, tree_filename) # WINDOWS VERSION
+    cmd = "wine dTcmd -fd %s -fm %s -sep '%s' -d %s" % (data_filename, names_filename, sep, tree_filename)
+    # output = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT, shell=True) # WINDOWS VERSION
+    output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
     # cmd = r"dTcmd -fd %s -fm %s -sep '%s' -d %s" % (
     #     data_filename, names_filename, sep, tree_filename)
     # cmd = r'noah "%s"' % cmd
@@ -43,16 +57,16 @@ def fit(df, class_name, columns, features_type, discrete, continuous,
 
     dt = nx.DiGraph(nx.drawing.nx_pydot.read_dot(tree_filename))
     dt_dot = pydotplus.graph_from_dot_data(open(tree_filename, 'r').read())
-    
+
     if os.path.exists(data_filename):
         os.remove(data_filename)
-        
+
     if os.path.exists(names_filename):
         os.remove(names_filename)
-        
+
     if os.path.exists(tree_filename):
         os.remove(tree_filename)
-        
+
     return dt, dt_dot
 
 
@@ -60,7 +74,7 @@ def predict(dt, X, class_name, features_type, discrete, continuous, leafnode=Tru
     edge_labels = get_edge_labels(dt)
     node_labels = get_node_labels(dt)
     node_isleaf = {k: v == 'ellipse' for k, v in nx.get_node_attributes(dt, 'shape').items()}
-    
+
     y_list = list()
     lf_list = list()
     for x in X:
@@ -70,10 +84,10 @@ def predict(dt, X, class_name, features_type, discrete, continuous, leafnode=Tru
             continue
         y_list.append(y)
         lf_list.append(tp[-1])
-    
+
     if leafnode:
         return np.array(y_list), lf_list
-    
+
     return np.array(y_list)
 
 
@@ -81,10 +95,10 @@ def get_node_labels(dt):
     return {k: v.replace('"', '').replace('\\n', '') for k, v in nx.get_node_attributes(dt, 'label').items()}
 
 
-def get_edge_labels(dt):    
+def get_edge_labels(dt):
     return {k: v.replace('"', '').replace('\\n', '') for k, v in nx.get_edge_attributes(dt, 'label').items()}
-    
-    
+
+
 def predict_single_record(dt, x, class_name, edge_labels, node_labels, node_isleaf, features_type, discrete, continuous,
                           n_iter=1000):
     root = 'n0'
@@ -98,7 +112,7 @@ def predict_single_record(dt, x, class_name, edge_labels, node_labels, node_isle
             count += 1
             edge_val = edge_labels[(node, child)]
             if att in discrete:
-                val = val.strip() if isinstance(val, str) else val     
+                val = val.strip() if isinstance(val, str) else val
                 if yadt_value2type(edge_val, att, features_type) == val:
                     tree_path.append(node)
                     node = child
@@ -123,25 +137,25 @@ def predict_single_record(dt, x, class_name, edge_labels, node_labels, node_isle
         count += 1
 
     tree_path.append(node)
-    
+
     outcome = node_labels[node].split('(')[0]
     outcome = yadt_value2type(outcome, class_name, features_type)
-        
+
     return outcome, tree_path
-    
+
 
 def predict_rule(dt, x, class_name, features_type, discrete, continuous):
     edge_labels = get_edge_labels(dt)
     node_labels = get_node_labels(dt)
     node_isleaf = {k: v == 'ellipse' for k, v in nx.get_node_attributes(dt, 'shape').items()}
 
-    y, tree_path = predict_single_record(dt, x, class_name, edge_labels, node_labels, node_isleaf, 
+    y, tree_path = predict_single_record(dt, x, class_name, edge_labels, node_labels, node_isleaf,
                                          features_type, discrete, continuous)
     if y is None:
         return None, None, None
-    
+
     rule = get_rule(tree_path, class_name, y, node_labels, edge_labels)
-    
+
     return y, rule, tree_path
 
 
@@ -150,20 +164,19 @@ def get_covered_record_index(tree_path, leaf_nodes):
 
 
 def get_rule(tree_path, class_name, y, node_labels=None, edge_labels=None, dt=None):
-    
     if node_labels is None:
         node_labels = get_node_labels(dt)
-    
+
     if edge_labels is None:
         edge_labels = get_edge_labels(dt)
 
     ant = dict()
-    for i in range(0, len(tree_path)-1):
+    for i in range(0, len(tree_path) - 1):
         node = tree_path[i]
         child = tree_path[i + 1]
         if (node, child) in edge_labels:
             att = node_labels[node]
-            val = edge_labels[(node, child)] 
+            val = edge_labels[(node, child)]
         else:
             att = node_labels[child]
             val = edge_labels[(child, node)]
@@ -215,25 +228,24 @@ def get_rule(tree_path, class_name, y, node_labels=None, edge_labels=None, dt=No
                 val = '<=%s' % new_max_thr
 
         ant[att] = val
-        
+
     cons = {class_name: y}
-    
+
     weights = node_labels[tree_path[-1]].split('(')[1]
     weights = weights.replace(')', '')
     weights = [float(w) for w in weights.split('/')]
-    
+
     rule = [cons, ant, weights]
-    
+
     return rule
 
 
 def yadt_value2type(x, attribute, features_type):
-
     if features_type[attribute] == 'integer':
         x = int(float(x))
     elif features_type[attribute] == 'double':
         x = float(x)
-        
+
     return x
 
 
