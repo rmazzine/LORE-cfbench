@@ -1,2 +1,29 @@
-## Alert
-To run this algorithm you need to install Wine and python 3.7
+# Tabular CF Benchmark
+
+## Requirements
+* Ubuntu 18.04
+* Python 3.7
+
+## How to run
+* Install requirements
+```bash
+pip install -r requirements_exp.txt
+```
+
+* Run benchmark
+```bash
+python run_exp.py
+```
+
+## Results
+* Results are saved in `cfbench_results` folder
+
+## Docker
+You must go to the root folder of the project and run the following command:
+```bash
+docker build -t lore_cfbench .
+```
+Then, you can run the benchmark with the following command:
+```bash
+docker run -it --rm -v $(pwd)/benchmark/cfbench_results:/lore/benchmark/cfbench_results lore_cfbench
+```

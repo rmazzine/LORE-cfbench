@@ -1,5 +1,4 @@
 import sys
-from collections import defaultdict
 
 sys.path.append('../')
 
